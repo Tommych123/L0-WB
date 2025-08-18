@@ -45,12 +45,12 @@
 
 ```bash
 git clone https://github.com/Tommych123/L0-WB.git
-cd L0
+cd L0-WB
 ```
 2. Создать файл с переменными окружения(.env):
 
 ```bash
-cp .env .env-example
+cp .env-example .env
 ```
 
 3. Запустить сервис, Kafka и PostgreSQL через Docker Compose:
@@ -123,7 +123,6 @@ go test ./internal/service -v
 ```bash
 go run cmd/producer/main.go 
 ```
-Ввести заказ в поле, например:
 
 ---
 
