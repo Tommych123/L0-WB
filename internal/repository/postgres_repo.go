@@ -20,7 +20,7 @@ func NewPostgresOrderRepository(db *sqlx.DB) *PostgresOrderRepository {
 	return &PostgresOrderRepository{db: db}
 }
 
-// Save сохраняет заказ в БД
+// Сохраняет заказ в БД
 func (rep *PostgresOrderRepository) Save(order *domain.Order) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -94,7 +94,7 @@ func (rep *PostgresOrderRepository) Save(order *domain.Order) error {
 	return tx.Commit()
 }
 
-// Get получение записи по ID
+// Получение записи по ID
 func (r *PostgresOrderRepository) Get(orderUID string) (*domain.Order, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -151,4 +151,134 @@ func (r *PostgresOrderRepository) Get(orderUID string) (*domain.Order, error) {
 
 	// Возвращаем собранный заказ из 4 таблиц
 	return &order, nil
+}
+
+// Возвращает все заказы из базы со всеми связанными сущностями
+func (r *PostgresOrderRepository) GetAll() ([]*domain.Order, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Получаем все заказы из таблицы orders
+	var orders []domain.Order
+	err := r.db.SelectContext(ctx, &orders, `
+        SELECT order_uid, track_number, entry, locale, internal_signature,
+               customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard
+        FROM orders
+    `)
+	if err != nil {
+		return nil, err
+	}
+
+	// Мапа для удобного доступа к заказам по order_uid
+	orderMap := make(map[string]*domain.Order, len(orders))
+	for i := range orders {
+		orderMap[orders[i].OrderUID] = &orders[i]
+	}
+
+	// Получаем все записи из delivery
+	var deliveries []struct {
+		OrderUID string `db:"order_uid"`
+		domain.Delivery
+	}
+	err = r.db.SelectContext(ctx, &deliveries, `
+        SELECT order_uid, name, phone, zip, city, address, region, email
+        FROM delivery
+    `)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range deliveries {
+		if o, ok := orderMap[d.OrderUID]; ok {
+			o.Delivery = d.Delivery
+		}
+	}
+
+	// Получаем все записи из payment
+	var payments []struct {
+		OrderUID string `db:"order_uid"`
+
+		Transaction  string `db:"transaction"`
+		RequestID    string `db:"request_id"`
+		Currency     string `db:"currency"`
+		Provider     string `db:"provider"`
+		Amount       int    `db:"amount"`
+		PaymentDt    int64  `db:"payment_dt"`
+		Bank         string `db:"bank"`
+		DeliveryCost int    `db:"delivery_cost"`
+		GoodsTotal   int    `db:"goods_total"`
+		CustomFee    int    `db:"custom_fee"`
+	}
+	err = r.db.SelectContext(ctx, &payments, `
+        SELECT order_uid, transaction, request_id, currency, provider, amount,
+               payment_dt, bank, delivery_cost, goods_total, custom_fee
+        FROM payment
+    `)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range payments {
+		if o, ok := orderMap[p.OrderUID]; ok {
+			o.Payment = domain.Payment{
+				Transaction:  p.Transaction,
+				RequestID:    p.RequestID,
+				Currency:     p.Currency,
+				Provider:     p.Provider,
+				Amount:       p.Amount,
+				PaymentDt:    p.PaymentDt,
+				Bank:         p.Bank,
+				DeliveryCost: p.DeliveryCost,
+				GoodsTotal:   p.GoodsTotal,
+				CustomFee:    p.CustomFee,
+			}
+		}
+	}
+
+	// Получаем все записи из items
+	var items []struct {
+		ChrtID      int    `db:"chrt_id"`
+		TrackNumber string `db:"track_number"`
+		Price       int    `db:"price"`
+		RID         string `db:"rid"`
+		Name        string `db:"name"`
+		Sale        int    `db:"sale"`
+		Size        string `db:"size"`
+		TotalPrice  int    `db:"total_price"`
+		NmID        int    `db:"nm_id"`
+		Brand       string `db:"brand"`
+		Status      int    `db:"status"`
+		OrderUID    string `db:"order_uid"`
+	}
+	err = r.db.SelectContext(ctx, &items, `
+        SELECT chrt_id, track_number, price, rid, name, sale, size,
+               total_price, nm_id, brand, status, order_uid
+        FROM items
+    `)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		if o, ok := orderMap[item.OrderUID]; ok {
+			o.Items = append(o.Items, domain.Item{
+				ChrtID:      item.ChrtID,
+				TrackNumber: item.TrackNumber,
+				Price:       item.Price,
+				RID:         item.RID,
+				Name:        item.Name,
+				Sale:        item.Sale,
+				Size:        item.Size,
+				TotalPrice:  item.TotalPrice,
+				NmID:        item.NmID,
+				Brand:       item.Brand,
+				Status:      item.Status,
+			})
+		}
+	}
+
+	// Преобразуем срез orders в срез указателей для возвращения
+	result := make([]*domain.Order, 0, len(orders))
+	for i := range orders {
+		result = append(result, &orders[i])
+	}
+
+	return result, nil
 }

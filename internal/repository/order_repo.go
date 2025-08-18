@@ -6,4 +6,5 @@ import "github.com/Tommych123/L0-WB/internal/domain"
 type OrderRepository interface {
 	Save(order *domain.Order) error
 	Get(orderUID string) (*domain.Order, error)
+	GetAll() ([]*domain.Order, error)
 }

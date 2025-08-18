@@ -7,7 +7,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Структура для считывания переменных окружения из env
+// Структура для переменных окружения из env
 type Config struct {
 	DBHost      string
 	DBPort      int
@@ -18,7 +18,7 @@ type Config struct {
 	ServicePort int
 }
 
-//Функция загрузки переменных окружения из env
+// Функция загрузки переменных окружения из env
 func Load() *Config {
 	godotenv.Load()
 	return &Config{

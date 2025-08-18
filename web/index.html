@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Поиск заказа</title>
+</head>
+
+<body>
+    <h1>Поиск заказа</h1>
+    <input type="text" id="orderId" placeholder="Введите Order UID">
+    <button onclick="fetchOrder()">Найти</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function fetchOrder() {
+            const id = document.getElementById('orderId').value;
+            const res = await fetch(`/orders/${id}`);
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            } else {
+                document.getElementById('result').textContent = 'Заказ не найден';
+            }
+        }
+    </script>
+</body>
+
+</html>
